@@ -26,4 +26,27 @@ git push origin main
 ```
 _Note: Your changes will only become visible in the main system once the Maintainer updates the submodule pointer in the main repository._
 
+## Testing
+`CHESS_BOARD_CLASS=ccc26.user.eradcliffe.b.Board python3 -m unittest tests/test_perft.py`
 
+## Profiling
+
+### cProfile
+```
+python3 -m cProfile -s cumulative -m ccc26.eval.perft \
+  --board ccc26.user.eradcliffe.b.Board -d 6 --mode custom \
+  --fen "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1"
+```
+
+### profiling.sampling
+```
+python3 -m profiling.sampling run -r 20khz --native --binary -o mine.bin \
+  -m ccc26.eval.perft --board ccc26.user.eradcliffe.b.Board -d 4 --mode custom \
+  --fen "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1"
+```
+
+#### Flame graph
+`python3 -m profiling.sampling replay --flamegraph -o mine-flame.html mine.bin`
+
+#### Heatmap
+`python3 -m profiling.sampling replay --heatmap -o mine-heatmap mine.bin`
