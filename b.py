@@ -7,8 +7,11 @@ The engine lives in sibling modules, each importing only from the ones above it:
     notation  FEN, square names, UCI and printing
 
 Set NUMBA_DISABLE_JIT=1 to run the engine as ordinary Python for debugging.
+Set TEMPO_LEGAL=copymake|pinaware to pick how Board filters legal moves (default
+copymake); see movegen.LEGAL_MODES. Board(legal=...) overrides it per board.
 """
 
+import os
 from collections.abc import Iterable
 
 import numpy as np
@@ -16,7 +19,7 @@ import numpy as np
 from ...board import AbstractChessBoard
 from .bitboard import MAX_MOVES, STARTING_FEN, WHITE, side_to_move
 from .attacks import in_check
-from .movegen import generate_legal, is_checkmate, is_stalemate, make_move, perft
+from .movegen import LEGAL_MODES, generate_legal, is_checkmate, is_stalemate, make_move, perft
 from .notation import export_fen, move_to_uci, parse_fen, render
 
 
@@ -30,11 +33,28 @@ class Move(int):
         return f"Move({str(self)!r})"
 
 
-class Board(AbstractChessBoard):
-    """Friendly wrapper: UCI strings in and out, numpy state inside."""
+DEFAULT_LEGAL = "copymake"
 
-    def __init__(self, fen: str | None = None) -> None:
+
+def legal_mode(name: str | None = None) -> str:
+    """A legality mode name: `name`, else $TEMPO_LEGAL, else copymake. Raises on unknown names."""
+    name = name or os.environ.get("TEMPO_LEGAL") or DEFAULT_LEGAL
+    if name not in LEGAL_MODES:
+        raise ValueError(f"unknown legality mode {name!r}; expected one of {', '.join(LEGAL_MODES)}")
+    return name
+
+
+class Board(AbstractChessBoard):
+    """Friendly wrapper: UCI strings in and out, numpy state inside.
+
+    legal: "copymake" or "pinaware" (see movegen.LEGAL_MODES). Defaults to $TEMPO_LEGAL,
+    else copymake. Chosen here in Python and passed into the compiled functions.
+    """
+
+    def __init__(self, fen: str | None = None, legal: str | None = None) -> None:
         self._stack: list[np.ndarray] = []
+        self.legal = legal_mode(legal)
+        self._mode = LEGAL_MODES[self.legal]
         super().__init__(fen)  # assigns self.fen, which parses it into self.state
 
     @property
@@ -63,7 +83,7 @@ class Board(AbstractChessBoard):
 
     def _legal_encoded(self) -> np.ndarray:
         moves = np.empty(MAX_MOVES, dtype=np.int64)
-        n = generate_legal(self.state, moves)
+        n = generate_legal(self.state, moves, self._mode)
         return moves[:n]
 
     @property
@@ -92,19 +112,19 @@ class Board(AbstractChessBoard):
         return bool(in_check(self.state))
 
     def is_checkmate(self) -> bool:
-        return bool(is_checkmate(self.state))
+        return bool(is_checkmate(self.state, self._mode))
 
     def is_stalemate(self) -> bool:
-        return bool(is_stalemate(self.state))
+        return bool(is_stalemate(self.state, self._mode))
 
     def perft(self, depth: int) -> int:
-        return int(perft(self.state, depth))
+        return int(perft(self.state, depth, self._mode))
 
     def __str__(self) -> str:
         return render(self.state)
 
     def __repr__(self) -> str:
-        return f"Board({self.fen!r})"
+        return f"Board({self.fen!r}, legal={self.legal!r})"
 
 
-__all__ = ["Board", "Move"]
+__all__ = ["Board", "Move", "legal_mode"]

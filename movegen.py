@@ -69,12 +69,26 @@ from .attacks import (
     KING_ATTACKS,
     KNIGHT_ATTACKS,
     PAWN_ATTACKS,
+    attackers_to,
     bishop_attacks,
     in_check,
     is_square_attacked,
     king_square,
+    pinned_pieces,
     rook_attacks,
 )
+
+
+# --- Legality modes ------------------------------------------------------------
+
+# How generate_legal decides which pseudo-legal moves are legal. Passed as a runtime
+# argument (never a global), so both modes live in one process and one cache.
+#   COPYMAKE  play every move on a copy and test whether the own king is attacked.
+#   PINAWARE  when not in check, skip that test for moves by an unpinned non-king
+#             piece that aren't en passant; they can't expose the king.
+LEGAL_COPYMAKE = 0
+LEGAL_PINAWARE = 1
+LEGAL_MODES = {"copymake": LEGAL_COPYMAKE, "pinaware": LEGAL_PINAWARE}
 
 
 # --- Castling rights table ------------------------------------------------
@@ -290,60 +304,85 @@ def make_move(state, move):
 
 
 @njit(cache=True)
-def generate_legal(state, moves):
+def safe_movers(state, side, mode):
+    """Squares of own pieces whose (non-en-passant) moves are legal without testing.
+
+    Copy-make, or in check: none. Pin-aware and not in check: every own piece except the
+    king and pinned pieces. Moving any other piece can't open a line to the king, because
+    the only lines into it are blocked by the pinned pieces, which stay excluded.
+    """
+    if mode != LEGAL_PINAWARE:
+        return U0
+    checkers = attackers_to(state, king_square(state, side), 1 - side)
+    if checkers != U0:
+        return U0
+    return state[OCC_WHITE + side] & ~state[piece_index(side, KING)] & ~pinned_pieces(state, side)
+
+
+@njit(cache=True)
+def is_legal(state, move, side, safe):
+    """Is this pseudo-legal move legal? `safe` comes from safe_movers."""
+    if (safe & bit(move_from(move))) != U0 and move_flag(move) != FLAG_EP:
+        return True
+    after = make_move(state, move)
+    # Pins and en passant discovered checks fall out of this for free
+    return not is_square_attacked(after, king_square(after, side), 1 - side)
+
+
+@njit(cache=True)
+def generate_legal(state, moves, mode=LEGAL_COPYMAKE):
     """Fill `moves` with legal moves; return the count."""
     pseudo = np.empty(MAX_MOVES, dtype=np.int64)
     count = generate_pseudo_legal(state, pseudo)
     side = side_to_move(state)
+    safe = safe_movers(state, side, mode)
     n = 0
     for i in range(count):
-        after = make_move(state, pseudo[i])
-        # Pins and en passant discovered checks fall out of this for free
-        if not is_square_attacked(after, king_square(after, side), 1 - side):
+        if is_legal(state, pseudo[i], side, safe):
             moves[n] = pseudo[i]
             n += 1
     return n
 
 
 @njit(cache=True)
-def has_legal_move(state):
+def has_legal_move(state, mode=LEGAL_COPYMAKE):
     pseudo = np.empty(MAX_MOVES, dtype=np.int64)
     count = generate_pseudo_legal(state, pseudo)
     side = side_to_move(state)
+    safe = safe_movers(state, side, mode)
     for i in range(count):
-        after = make_move(state, pseudo[i])
-        if not is_square_attacked(after, king_square(after, side), 1 - side):
+        if is_legal(state, pseudo[i], side, safe):
             return True
     return False
 
 
 @njit(cache=True)
-def is_checkmate(state):
-    return in_check(state) and not has_legal_move(state)
+def is_checkmate(state, mode=LEGAL_COPYMAKE):
+    return in_check(state) and not has_legal_move(state, mode)
 
 
 @njit(cache=True)
-def is_stalemate(state):
-    return not in_check(state) and not has_legal_move(state)
+def is_stalemate(state, mode=LEGAL_COPYMAKE):
+    return not in_check(state) and not has_legal_move(state, mode)
 
 
 @njit(cache=True)
-def perft(state, depth):
+def perft(state, depth, mode=LEGAL_COPYMAKE):
     """Count leaf nodes of the legal move tree; the standard move generator test."""
     if depth == 0:
         return 1
     moves = np.empty(MAX_MOVES, dtype=np.int64)
-    n = generate_legal(state, moves)
+    n = generate_legal(state, moves, mode)
     if depth == 1:
         return n
     total = 0
     for i in range(n):
-        total += perft(make_move(state, moves[i]), depth - 1)
+        total += perft(make_move(state, moves[i]), depth - 1, mode)
     return total
 
 
 @njit(cache=True)
-def perft_every_leaf(state, depth):
+def perft_every_leaf(state, depth, mode=LEGAL_COPYMAKE):
     """perft without the depth-1 shortcut: every leaf move is made, like the course's perft loops.
 
     perft above counts the last ply from the legal-move list (bulk counting); this one plays each
@@ -352,8 +391,8 @@ def perft_every_leaf(state, depth):
     if depth == 0:
         return 1
     moves = np.empty(MAX_MOVES, dtype=np.int64)
-    n = generate_legal(state, moves)
+    n = generate_legal(state, moves, mode)
     total = 0
     for i in range(n):
-        total += perft_every_leaf(make_move(state, moves[i]), depth - 1)
+        total += perft_every_leaf(make_move(state, moves[i]), depth - 1, mode)
     return total

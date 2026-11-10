@@ -22,6 +22,11 @@ Every position and depth is timed four ways:
                           trick, shown separately so it isn't mixed into the
                           compiled-vs-Python comparison.
 
+Both compiled engines also run a second time with pin-aware legality (" · pin-aware",
+movegen.LEGAL_PINAWARE) next to the copy-make baseline, so one run compares old and
+new move generation. "from Python" uses b.Board's default ($TEMPO_LEGAL, else
+copymake). Each engine's mode is saved in results.json.
+
 Before timing, each engine runs every position once at a shallow depth so the JIT
 has compiled (or loaded from cache) everything; those warm-up times are saved too,
 but kept out of the results. Within a cell the engines take turns run by run, so
@@ -51,10 +56,10 @@ import chess
 import numba
 
 from ....eval.perft import custom_perft, reference_perft
-from ..b import Board
+from ..b import Board, legal_mode
 from ..bitboard import STARTING_FEN
 from ..movegen import perft as bulk_perft
-from ..movegen import perft_every_leaf
+from ..movegen import LEGAL_MODES, perft_every_leaf
 from ..notation import parse_fen
 from . import report
 
@@ -92,10 +97,19 @@ class Engine:
     description: str
     setup: Callable[[str], Any]  # FEN -> whatever `run` needs, built outside the timer
     run: Callable[[Any, int], int]  # (setup result, depth) -> leaf nodes
+    mode: str | None = None  # tempo's legality mode (movegen.LEGAL_MODES); None for python-chess
 
 
 NO_JIT = "" if JIT else report.NO_JIT_SUFFIX
 LABELS = report.ENGINE_LABELS
+PIN_AWARE = report.PIN_AWARE_SUFFIX
+
+
+def compiled(perft: Callable[..., int], mode: str) -> Callable[[Any, int], int]:
+    code = LEGAL_MODES[mode]
+    return lambda state, depth: int(perft(state, depth, code))
+
+
 ENGINES = [
     Engine(
         "python-chess",
@@ -112,6 +126,7 @@ ENGINES = [
         "leaf played. Mostly measures per-node interface cost, not move generation.",
         Board,
         custom_perft,
+        legal_mode(),
     ),
     Engine(
         "tempo-compiled-full",
@@ -119,7 +134,17 @@ ENGINES = [
         "movegen.perft_every_leaf: the whole recursion in Numba, no Python per node, every leaf move made. "
         "What the board itself can do, on the same terms as the two above.",
         parse_fen,
-        lambda state, depth: int(perft_every_leaf(state, depth)),
+        compiled(perft_every_leaf, "copymake"),
+        "copymake",
+    ),
+    Engine(
+        "tempo-compiled-full-pinaware",
+        LABELS["tempo-compiled-full-pinaware"] + NO_JIT,
+        "Same as tempo · compiled, with pin-aware legality: moves by unpinned non-king pieces skip the "
+        "make-and-test check when not in check.",
+        parse_fen,
+        compiled(perft_every_leaf, "pinaware"),
+        "pinaware",
     ),
     Engine(
         "tempo-compiled",
@@ -127,7 +152,16 @@ ENGINES = [
         "movegen.perft: like tempo · compiled, but the last ply is counted from the legal-move list "
         "instead of making each leaf move (bulk counting). Same nodes, less work per node.",
         parse_fen,
-        lambda state, depth: int(bulk_perft(state, depth)),
+        compiled(bulk_perft, "copymake"),
+        "copymake",
+    ),
+    Engine(
+        "tempo-compiled-pinaware",
+        LABELS["tempo-compiled-pinaware"] + NO_JIT,
+        "Same as tempo · compiled + bulk count, with pin-aware legality.",
+        parse_fen,
+        compiled(bulk_perft, "pinaware"),
+        "pinaware",
     ),
 ]
 
@@ -216,7 +250,7 @@ def main() -> None:
             "timer": "time.perf_counter",
             "timer_resolution_s": clock.resolution,
         },
-        "engines": [{"id": e.id, "label": e.label, "description": e.description} for e in ENGINES],
+        "engines": [{"id": e.id, "label": e.label, "description": e.description, "mode": e.mode} for e in ENGINES],
         "positions": [{"name": name, "fen": fen, "published": published} for name, fen, published in POSITIONS],
         "warmup": [],
         "results": [],

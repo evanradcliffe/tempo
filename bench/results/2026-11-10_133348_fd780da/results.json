@@ -1,0 +1,1084 @@
+{
+  "schema": 1,
+  "started": "2026-11-10T13:33:48",
+  "commit": "fd780da",
+  "dirty": false,
+  "machine": {
+    "cpu": "Intel(R) Core(TM) i7-14650HX",
+    "threads": 24,
+    "platform": "Linux-7.0.0-43-generic-x86_64-with-glibc2.43",
+    "load_average_start": [
+      1.63,
+      1.32,
+      1.09
+    ],
+    "load_average_end": [
+      1.91,
+      1.5,
+      1.17
+    ]
+  },
+  "versions": {
+    "python": "3.15.0rc3",
+    "python_chess": "1.11.2",
+    "numba": "0.68.1"
+  },
+  "jit": true,
+  "settings": {
+    "max_depth": 4,
+    "repeat": 5,
+    "warmup_depth": 2,
+    "gc_disabled_while_timing": true,
+    "timer": "time.perf_counter",
+    "timer_resolution_s": 1e-09
+  },
+  "engines": [
+    {
+      "id": "python-chess",
+      "label": "python-chess",
+      "description": "The course harness's reference_perft: chess.Board driven from Python, one push/pop per node, every leaf played."
+    },
+    {
+      "id": "tempo-harness",
+      "label": "tempo \u00b7 from Python",
+      "description": "The course harness's custom_perft on b.Board, also driven from Python once per node with every leaf played. Mostly measures per-node interface cost, not move generation."
+    },
+    {
+      "id": "tempo-compiled-full",
+      "label": "tempo \u00b7 compiled",
+      "description": "movegen.perft_every_leaf: the whole recursion in Numba, no Python per node, every leaf move made. What the board itself can do, on the same terms as the two above."
+    },
+    {
+      "id": "tempo-compiled",
+      "label": "tempo \u00b7 compiled + bulk count",
+      "description": "movegen.perft: like tempo \u00b7 compiled, but the last ply is counted from the legal-move list instead of making each leaf move (bulk counting). Same nodes, less work per node."
+    }
+  ],
+  "positions": [
+    {
+      "name": "Start",
+      "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "published": [
+        20,
+        400,
+        8902,
+        197281,
+        4865609,
+        119060324
+      ]
+    },
+    {
+      "name": "Kiwi-Pete",
+      "fen": "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+      "published": [
+        48,
+        2039,
+        97862,
+        4085603,
+        193690690
+      ]
+    },
+    {
+      "name": "En Passant & Pins",
+      "fen": "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1",
+      "published": [
+        14,
+        191,
+        2812,
+        43238,
+        674624,
+        11030083,
+        178633661
+      ]
+    }
+  ],
+  "warmup": [
+    {
+      "position": "Start",
+      "engine": "python-chess",
+      "depth": 2,
+      "seconds": 0.0013935009992565028
+    },
+    {
+      "position": "Start",
+      "engine": "tempo-harness",
+      "depth": 2,
+      "seconds": 0.004871781002293574
+    },
+    {
+      "position": "Start",
+      "engine": "tempo-compiled-full",
+      "depth": 2,
+      "seconds": 0.0029734560012002476
+    },
+    {
+      "position": "Start",
+      "engine": "tempo-compiled",
+      "depth": 2,
+      "seconds": 0.0029304490017239004
+    },
+    {
+      "position": "Kiwi-Pete",
+      "engine": "python-chess",
+      "depth": 2,
+      "seconds": 0.0061985590000404045
+    },
+    {
+      "position": "Kiwi-Pete",
+      "engine": "tempo-harness",
+      "depth": 2,
+      "seconds": 0.001799612000468187
+    },
+    {
+      "position": "Kiwi-Pete",
+      "engine": "tempo-compiled-full",
+      "depth": 2,
+      "seconds": 0.0002571850018284749
+    },
+    {
+      "position": "Kiwi-Pete",
+      "engine": "tempo-compiled",
+      "depth": 2,
+      "seconds": 0.0001537789976282511
+    },
+    {
+      "position": "En Passant & Pins",
+      "engine": "python-chess",
+      "depth": 2,
+      "seconds": 0.0006788509999751113
+    },
+    {
+      "position": "En Passant & Pins",
+      "engine": "tempo-harness",
+      "depth": 2,
+      "seconds": 0.0001912199986691121
+    },
+    {
+      "position": "En Passant & Pins",
+      "engine": "tempo-compiled-full",
+      "depth": 2,
+      "seconds": 2.8660000680247322e-05
+    },
+    {
+      "position": "En Passant & Pins",
+      "engine": "tempo-compiled",
+      "depth": 2,
+      "seconds": 1.834800059441477e-05
+    }
+  ],
+  "results": [
+    {
+      "position": "Start",
+      "depth": 1,
+      "engine": "python-chess",
+      "nodes": [
+        20,
+        20,
+        20,
+        20,
+        20
+      ],
+      "seconds": [
+        7.530100265285e-05,
+        6.511399988085032e-05,
+        6.269799996516667e-05,
+        6.501699681393802e-05,
+        6.352199852699414e-05
+      ]
+    },
+    {
+      "position": "Start",
+      "depth": 1,
+      "engine": "tempo-harness",
+      "nodes": [
+        20,
+        20,
+        20,
+        20,
+        20
+      ],
+      "seconds": [
+        2.428199877613224e-05,
+        2.1110998204676434e-05,
+        2.054399737971835e-05,
+        2.0882998796878383e-05,
+        5.452799814520404e-05
+      ]
+    },
+    {
+      "position": "Start",
+      "depth": 1,
+      "engine": "tempo-compiled-full",
+      "nodes": [
+        20,
+        20,
+        20,
+        20,
+        20
+      ],
+      "seconds": [
+        3.0800001695752144e-06,
+        3.0390001484192908e-06,
+        3.0769988370593637e-06,
+        3.168999683111906e-06,
+        4.392997652757913e-06
+      ]
+    },
+    {
+      "position": "Start",
+      "depth": 1,
+      "engine": "tempo-compiled",
+      "nodes": [
+        20,
+        20,
+        20,
+        20,
+        20
+      ],
+      "seconds": [
+        1.7810016288422048e-06,
+        1.7310012481175363e-06,
+        1.7319980543106794e-06,
+        1.743999746395275e-06,
+        2.04800016945228e-06
+      ]
+    },
+    {
+      "position": "Start",
+      "depth": 2,
+      "engine": "python-chess",
+      "nodes": [
+        400,
+        400,
+        400,
+        400,
+        400
+      ],
+      "seconds": [
+        0.0011236350001126993,
+        0.0010984700020344462,
+        0.001107480999053223,
+        0.0010960129984596279,
+        0.0011041889993066434
+      ]
+    },
+    {
+      "position": "Start",
+      "depth": 2,
+      "engine": "tempo-harness",
+      "nodes": [
+        400,
+        400,
+        400,
+        400,
+        400
+      ],
+      "seconds": [
+        0.0003642800002126023,
+        0.0003765109977393877,
+        0.00036008900133310817,
+        0.00036586300120688975,
+        0.00036254999940865673
+      ]
+    },
+    {
+      "position": "Start",
+      "depth": 2,
+      "engine": "tempo-compiled-full",
+      "nodes": [
+        400,
+        400,
+        400,
+        400,
+        400
+      ],
+      "seconds": [
+        5.239500023890287e-05,
+        5.424100163509138e-05,
+        5.193399920244701e-05,
+        5.215700002736412e-05,
+        5.206599962548353e-05
+      ]
+    },
+    {
+      "position": "Start",
+      "depth": 2,
+      "engine": "tempo-compiled",
+      "nodes": [
+        400,
+        400,
+        400,
+        400,
+        400
+      ],
+      "seconds": [
+        3.1337000109488145e-05,
+        3.232300150557421e-05,
+        3.091600228799507e-05,
+        3.1055998988449574e-05,
+        3.099999958067201e-05
+      ]
+    },
+    {
+      "position": "Start",
+      "depth": 3,
+      "engine": "python-chess",
+      "nodes": [
+        8902,
+        8902,
+        8902,
+        8902,
+        8902
+      ],
+      "seconds": [
+        0.0218972170005145,
+        0.021723175999795785,
+        0.021775704000901897,
+        0.02242105600089417,
+        0.02213568599836435
+      ]
+    },
+    {
+      "position": "Start",
+      "depth": 3,
+      "engine": "tempo-harness",
+      "nodes": [
+        8902,
+        8902,
+        8902,
+        8902,
+        8902
+      ],
+      "seconds": [
+        0.007846288001019275,
+        0.007793167998897843,
+        0.007924641999125015,
+        0.007935887999337865,
+        0.007830268001271179
+      ]
+    },
+    {
+      "position": "Start",
+      "depth": 3,
+      "engine": "tempo-compiled-full",
+      "nodes": [
+        8902,
+        8902,
+        8902,
+        8902,
+        8902
+      ],
+      "seconds": [
+        0.0011630310000327881,
+        0.0011719870017259382,
+        0.001104655002563959,
+        0.001130060998548288,
+        0.0011818070015578996
+      ]
+    },
+    {
+      "position": "Start",
+      "depth": 3,
+      "engine": "tempo-compiled",
+      "nodes": [
+        8902,
+        8902,
+        8902,
+        8902,
+        8902
+      ],
+      "seconds": [
+        0.0006469930012826808,
+        0.0006878349995531607,
+        0.000662662998365704,
+        0.0006771719999960624,
+        0.0006834980013081804
+      ]
+    },
+    {
+      "position": "Start",
+      "depth": 4,
+      "engine": "python-chess",
+      "nodes": [
+        197281,
+        197281,
+        197281,
+        197281,
+        197281
+      ],
+      "seconds": [
+        0.5195271150005283,
+        0.5360001869994448,
+        0.5375169649996678,
+        0.5333976719994098,
+        0.5278490519995103
+      ]
+    },
+    {
+      "position": "Start",
+      "depth": 4,
+      "engine": "tempo-harness",
+      "nodes": [
+        197281,
+        197281,
+        197281,
+        197281,
+        197281
+      ],
+      "seconds": [
+        0.17412215299918898,
+        0.17371841499698348,
+        0.17485875800048234,
+        0.1742889839988493,
+        0.17375440899922978
+      ]
+    },
+    {
+      "position": "Start",
+      "depth": 4,
+      "engine": "tempo-compiled-full",
+      "nodes": [
+        197281,
+        197281,
+        197281,
+        197281,
+        197281
+      ],
+      "seconds": [
+        0.025075230998481857,
+        0.0250089740002295,
+        0.025258814999688184,
+        0.025079867002204992,
+        0.025110809001489542
+      ]
+    },
+    {
+      "position": "Start",
+      "depth": 4,
+      "engine": "tempo-compiled",
+      "nodes": [
+        197281,
+        197281,
+        197281,
+        197281,
+        197281
+      ],
+      "seconds": [
+        0.014808728003117722,
+        0.014746216998901218,
+        0.014887236000504345,
+        0.014693907000037143,
+        0.014776476000406547
+      ]
+    },
+    {
+      "position": "Kiwi-Pete",
+      "depth": 1,
+      "engine": "python-chess",
+      "nodes": [
+        48,
+        48,
+        48,
+        48,
+        48
+      ],
+      "seconds": [
+        0.00020329499966464937,
+        0.00016677199892001227,
+        0.0001544900005683303,
+        0.00014983300206949934,
+        0.00015660999997635372
+      ]
+    },
+    {
+      "position": "Kiwi-Pete",
+      "depth": 1,
+      "engine": "tempo-harness",
+      "nodes": [
+        48,
+        48,
+        48,
+        48,
+        48
+      ],
+      "seconds": [
+        4.8796999180922285e-05,
+        4.157500006840564e-05,
+        4.146799983573146e-05,
+        4.385699867270887e-05,
+        4.469400300877169e-05
+      ]
+    },
+    {
+      "position": "Kiwi-Pete",
+      "depth": 1,
+      "engine": "tempo-compiled-full",
+      "nodes": [
+        48,
+        48,
+        48,
+        48,
+        48
+      ],
+      "seconds": [
+        7.167000148911029e-06,
+        6.164998922031373e-06,
+        6.084999768063426e-06,
+        6.0490019677672535e-06,
+        6.548998499056324e-06
+      ]
+    },
+    {
+      "position": "Kiwi-Pete",
+      "depth": 1,
+      "engine": "tempo-compiled",
+      "nodes": [
+        48,
+        48,
+        48,
+        48,
+        48
+      ],
+      "seconds": [
+        3.844997991109267e-06,
+        3.583001671358943e-06,
+        3.46899832948111e-06,
+        3.463999746600166e-06,
+        3.815999662037939e-06
+      ]
+    },
+    {
+      "position": "Kiwi-Pete",
+      "depth": 2,
+      "engine": "python-chess",
+      "nodes": [
+        2039,
+        2039,
+        2039,
+        2039,
+        2039
+      ],
+      "seconds": [
+        0.0061464439968403894,
+        0.006026801998814335,
+        0.0059739700009231456,
+        0.005942980998952407,
+        0.005945859000348719
+      ]
+    },
+    {
+      "position": "Kiwi-Pete",
+      "depth": 2,
+      "engine": "tempo-harness",
+      "nodes": [
+        2039,
+        2039,
+        2039,
+        2039,
+        2039
+      ],
+      "seconds": [
+        0.0017403559977537952,
+        0.0018036049987131264,
+        0.0017039819977071602,
+        0.0017848410025180783,
+        0.001704553000308806
+      ]
+    },
+    {
+      "position": "Kiwi-Pete",
+      "depth": 2,
+      "engine": "tempo-compiled-full",
+      "nodes": [
+        2039,
+        2039,
+        2039,
+        2039,
+        2039
+      ],
+      "seconds": [
+        0.0002722630015341565,
+        0.0002543779992265627,
+        0.00024945999757619575,
+        0.0002507130011508707,
+        0.0002639660015120171
+      ]
+    },
+    {
+      "position": "Kiwi-Pete",
+      "depth": 2,
+      "engine": "tempo-compiled",
+      "nodes": [
+        2039,
+        2039,
+        2039,
+        2039,
+        2039
+      ],
+      "seconds": [
+        0.00015367299783974886,
+        0.00015266599802998826,
+        0.0001447670001653023,
+        0.0001569500018376857,
+        0.00015603099745931104
+      ]
+    },
+    {
+      "position": "Kiwi-Pete",
+      "depth": 3,
+      "engine": "python-chess",
+      "nodes": [
+        97862,
+        97862,
+        97862,
+        97862,
+        97862
+      ],
+      "seconds": [
+        0.2568298580008559,
+        0.2592951530023129,
+        0.25934951700037345,
+        0.26116435099902446,
+        0.26277714100069716
+      ]
+    },
+    {
+      "position": "Kiwi-Pete",
+      "depth": 3,
+      "engine": "tempo-harness",
+      "nodes": [
+        97862,
+        97862,
+        97862,
+        97862,
+        97862
+      ],
+      "seconds": [
+        0.08187692299907212,
+        0.08204177799780155,
+        0.08303444800185389,
+        0.08254461899923626,
+        0.08671205799691961
+      ]
+    },
+    {
+      "position": "Kiwi-Pete",
+      "depth": 3,
+      "engine": "tempo-compiled-full",
+      "nodes": [
+        97862,
+        97862,
+        97862,
+        97862,
+        97862
+      ],
+      "seconds": [
+        0.011965937999775633,
+        0.011890305999258999,
+        0.012078875999577576,
+        0.011968350998358801,
+        0.012444422998669324
+      ]
+    },
+    {
+      "position": "Kiwi-Pete",
+      "depth": 3,
+      "engine": "tempo-compiled",
+      "nodes": [
+        97862,
+        97862,
+        97862,
+        97862,
+        97862
+      ],
+      "seconds": [
+        0.006855738000012934,
+        0.006787928999983706,
+        0.0069403330016939435,
+        0.00677755799915758,
+        0.006846412998129381
+      ]
+    },
+    {
+      "position": "Kiwi-Pete",
+      "depth": 4,
+      "engine": "python-chess",
+      "nodes": [
+        4085603,
+        4085603,
+        4085603,
+        4085603,
+        4085603
+      ],
+      "seconds": [
+        11.366534595999838,
+        11.315353622001567,
+        11.33304082199902,
+        11.361784066000837,
+        11.3734210420007
+      ]
+    },
+    {
+      "position": "Kiwi-Pete",
+      "depth": 4,
+      "engine": "tempo-harness",
+      "nodes": [
+        4085603,
+        4085603,
+        4085603,
+        4085603,
+        4085603
+      ],
+      "seconds": [
+        3.442385430000286,
+        3.4691337139993266,
+        3.4438564749980287,
+        3.4525069120027183,
+        3.4463455920013075
+      ]
+    },
+    {
+      "position": "Kiwi-Pete",
+      "depth": 4,
+      "engine": "tempo-compiled-full",
+      "nodes": [
+        4085603,
+        4085603,
+        4085603,
+        4085603,
+        4085603
+      ],
+      "seconds": [
+        0.5062689990008948,
+        0.5101592829996662,
+        0.5009011010006361,
+        0.5062694279986317,
+        0.5086079860011523
+      ]
+    },
+    {
+      "position": "Kiwi-Pete",
+      "depth": 4,
+      "engine": "tempo-compiled",
+      "nodes": [
+        4085603,
+        4085603,
+        4085603,
+        4085603,
+        4085603
+      ],
+      "seconds": [
+        0.2941894020004838,
+        0.29786940299891285,
+        0.2942737150005996,
+        0.29601840900068055,
+        0.2961706129972299
+      ]
+    },
+    {
+      "position": "En Passant & Pins",
+      "depth": 1,
+      "engine": "python-chess",
+      "nodes": [
+        14,
+        14,
+        14,
+        14,
+        14
+      ],
+      "seconds": [
+        9.022800077218562e-05,
+        5.874799899174832e-05,
+        5.261200203676708e-05,
+        4.9598002078710124e-05,
+        5.008200241718441e-05
+      ]
+    },
+    {
+      "position": "En Passant & Pins",
+      "depth": 1,
+      "engine": "tempo-harness",
+      "nodes": [
+        14,
+        14,
+        14,
+        14,
+        14
+      ],
+      "seconds": [
+        3.1056999432621524e-05,
+        1.719899955787696e-05,
+        1.623000207473524e-05,
+        1.5044002793729305e-05,
+        1.5682002413086593e-05
+      ]
+    },
+    {
+      "position": "En Passant & Pins",
+      "depth": 1,
+      "engine": "tempo-compiled-full",
+      "nodes": [
+        14,
+        14,
+        14,
+        14,
+        14
+      ],
+      "seconds": [
+        3.773002390516922e-06,
+        2.4910004867706448e-06,
+        2.3180000425782055e-06,
+        2.4850014597177505e-06,
+        2.2979984350968152e-06
+      ]
+    },
+    {
+      "position": "En Passant & Pins",
+      "depth": 1,
+      "engine": "tempo-compiled",
+      "nodes": [
+        14,
+        14,
+        14,
+        14,
+        14
+      ],
+      "seconds": [
+        1.815998984966427e-06,
+        1.553999027237296e-06,
+        1.4409997675102204e-06,
+        1.3999997463542968e-06,
+        1.4080032997298986e-06
+      ]
+    },
+    {
+      "position": "En Passant & Pins",
+      "depth": 2,
+      "engine": "python-chess",
+      "nodes": [
+        191,
+        191,
+        191,
+        191,
+        191
+      ],
+      "seconds": [
+        0.000669329001539154,
+        0.0005995149986119941,
+        0.0006107299996074289,
+        0.000607979000051273,
+        0.0006372850002662744
+      ]
+    },
+    {
+      "position": "En Passant & Pins",
+      "depth": 2,
+      "engine": "tempo-harness",
+      "nodes": [
+        191,
+        191,
+        191,
+        191,
+        191
+      ],
+      "seconds": [
+        0.000190001999726519,
+        0.00017900600141729228,
+        0.00018131700198864564,
+        0.00017599399870960042,
+        0.0001989740012504626
+      ]
+    },
+    {
+      "position": "En Passant & Pins",
+      "depth": 2,
+      "engine": "tempo-compiled-full",
+      "nodes": [
+        191,
+        191,
+        191,
+        191,
+        191
+      ],
+      "seconds": [
+        2.9947997973067686e-05,
+        2.7170997782377526e-05,
+        2.7206002414459363e-05,
+        2.6977999368682504e-05,
+        2.9966999136377126e-05
+      ]
+    },
+    {
+      "position": "En Passant & Pins",
+      "depth": 2,
+      "engine": "tempo-compiled",
+      "nodes": [
+        191,
+        191,
+        191,
+        191,
+        191
+      ],
+      "seconds": [
+        1.8972998077515513e-05,
+        1.7425001715309918e-05,
+        1.7348000255879015e-05,
+        1.7235997802345082e-05,
+        1.923099989653565e-05
+      ]
+    },
+    {
+      "position": "En Passant & Pins",
+      "depth": 3,
+      "engine": "python-chess",
+      "nodes": [
+        2812,
+        2812,
+        2812,
+        2812,
+        2812
+      ],
+      "seconds": [
+        0.008463518002827186,
+        0.008327956002176506,
+        0.00845643399952678,
+        0.008515566998539725,
+        0.008490448999509681
+      ]
+    },
+    {
+      "position": "En Passant & Pins",
+      "depth": 3,
+      "engine": "tempo-harness",
+      "nodes": [
+        2812,
+        2812,
+        2812,
+        2812,
+        2812
+      ],
+      "seconds": [
+        0.0026988530007656664,
+        0.002697730997169856,
+        0.0027382719999877736,
+        0.0027485309983603656,
+        0.0026882080019277055
+      ]
+    },
+    {
+      "position": "En Passant & Pins",
+      "depth": 3,
+      "engine": "tempo-compiled-full",
+      "nodes": [
+        2812,
+        2812,
+        2812,
+        2812,
+        2812
+      ],
+      "seconds": [
+        0.0004135769995627925,
+        0.0003783169995585922,
+        0.00038787499943282455,
+        0.0003852080008073244,
+        0.00038246900294325314
+      ]
+    },
+    {
+      "position": "En Passant & Pins",
+      "depth": 3,
+      "engine": "tempo-compiled",
+      "nodes": [
+        2812,
+        2812,
+        2812,
+        2812,
+        2812
+      ],
+      "seconds": [
+        0.0002399379991402384,
+        0.0002406980020168703,
+        0.00023374500233330764,
+        0.0002336289981030859,
+        0.0002334810014872346
+      ]
+    },
+    {
+      "position": "En Passant & Pins",
+      "depth": 4,
+      "engine": "python-chess",
+      "nodes": [
+        43238,
+        43238,
+        43238,
+        43238,
+        43238
+      ],
+      "seconds": [
+        0.1330273120001948,
+        0.13307705899933353,
+        0.13277300499976263,
+        0.13291246800145018,
+        0.1331949289997283
+      ]
+    },
+    {
+      "position": "En Passant & Pins",
+      "depth": 4,
+      "engine": "tempo-harness",
+      "nodes": [
+        43238,
+        43238,
+        43238,
+        43238,
+        43238
+      ],
+      "seconds": [
+        0.04099065599802998,
+        0.04115449000164517,
+        0.04109104099916294,
+        0.04082798899980844,
+        0.040645037002832396
+      ]
+    },
+    {
+      "position": "En Passant & Pins",
+      "depth": 4,
+      "engine": "tempo-compiled-full",
+      "nodes": [
+        43238,
+        43238,
+        43238,
+        43238,
+        43238
+      ],
+      "seconds": [
+        0.006175270002131583,
+        0.006075420998968184,
+        0.0060801339968747925,
+        0.006136975000117673,
+        0.005958819998340914
+      ]
+    },
+    {
+      "position": "En Passant & Pins",
+      "depth": 4,
+      "engine": "tempo-compiled",
+      "nodes": [
+        43238,
+        43238,
+        43238,
+        43238,
+        43238
+      ],
+      "seconds": [
+        0.0038013800003682263,
+        0.0037894409979344346,
+        0.0037714819991379045,
+        0.003790304999711225,
+        0.0037310339976102114
+      ]
+    }
+  ],
+  "finished": "2026-11-10T13:35:13"
+}

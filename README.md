@@ -27,7 +27,13 @@ Run from the root of the seminar's `winter26` repo, with this repo mounted at `s
 ### Testing
 ```
 CHESS_BOARD_CLASS=ccc26.user.eradcliffe.b.Board python3 -m unittest tests/test_perft.py
+python3 -m unittest ccc26.user.eradcliffe.tests.test_legal_modes                         # ~3 s
+TEMPO_DIFF_GAMES=3000 python3 -m unittest ccc26.user.eradcliffe.tests.test_legal_modes   # full differential, ~1 min
 ```
+`test_legal_modes` checks that copy-make and pin-aware legality agree: `pinned_pieces` on hand-made pins, perft against the published counts in both modes, and random games where both modes and python-chess must give the same legal moves at every position.
+
+> [!WARNING]
+> Numba's `cache=True` only recompiles a function when **its own file** changes. If you edit `bitboard.py` or `attacks.py`, cached functions in `movegen.py` keep the old compiled code and tests can pass against stale code. After such an edit, clear the cache first: `find . -name '*.nb[ic]' -delete` (or run with `NUMBA_CACHE_DIR` set to an empty folder).
 
 ### Benchmarking
 Perft against python-chess on Start, Kiwi-Pete and En Passant & Pins, with the JIT warmed up first. Each run gets a folder in `bench/results/`:
@@ -40,13 +46,21 @@ NUMBA_DISABLE_JIT=1 python3 -m ccc26.user.eradcliffe.bench -d 3 -r 3
 python3 -m ccc26.user.eradcliffe.bench.report           # rebuild the latest report from its JSON
 python3 -m ccc26.user.eradcliffe.bench.report <run> --nojit <no-JIT run>   # add a no-JIT bar to the staircase
 ```
-Four engines, all checked against the published perft counts:
+Six engines, all checked against the published perft counts:
 - **python-chess**: the course's `reference_perft`, one push/pop per node.
 - **tempo · from Python**: the course's `custom_perft` on `b.Board`, also one push/pop per node from Python. This mostly measures interface cost.
 - **tempo · compiled**: `movegen.perft_every_leaf`, the whole recursion in Numba with every leaf move made. This is the fair comparison with python-chess.
 - **tempo · compiled + bulk count**: `movegen.perft`, which counts the last ply from the legal-move list instead of making each move. It visits the same nodes with less work, the usual engine trick.
+- **· pin-aware**: both compiled engines run a second time with pin-aware legality (see below), next to the copy-make baseline. Each engine's mode is saved in `results.json`.
 
-`staircase.png` puts all engines for one position and depth (Kiwi-Pete, depth 3 by default) in order from slowest to fastest. With `--nojit` it adds the every-leaf engine from a `NUMBA_DISABLE_JIT=1` run as plain Python. Charts need `matplotlib` (`uv pip install matplotlib`). Without it, the report is written without charts.
+`staircase.png` puts all engines for one position and depth (Kiwi-Pete, depth 4 by default) in order from slowest to fastest. With `--nojit` it adds the every-leaf engine from a `NUMBA_DISABLE_JIT=1` run as plain Python. Charts need `matplotlib` (`uv pip install matplotlib`). Without it, the report is written without charts.
+
+### Legality modes
+Move generation produces pseudo-legal moves, then filters out the ones that leave the own king in check. There are two ways to do that filter, chosen at runtime:
+- `copymake` (default): play every move on a copy and test whether the king is attacked.
+- `pinaware`: when not in check, moves by a piece that is neither the king nor pinned skip that test (except en passant), because they can't expose the king. Everything else still gets the full test.
+
+`b.Board` reads `TEMPO_LEGAL=copymake|pinaware` (or `Board(fen, legal="pinaware")`) and passes the mode into the compiled functions as an argument, so both modes coexist in one process.
 
 ### Profiling
 

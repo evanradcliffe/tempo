@@ -33,20 +33,23 @@ FAST_CELL_S = 1e-3  # below this, call overhead and timer noise dominate a run
 NOISY_SPREAD = 0.10  # (max - min) / min above this is flagged
 
 STAIRCASE_POSITION = "Kiwi-Pete"
-STAIRCASE_DEPTH = 3
+STAIRCASE_DEPTH = 4
 NOJIT_ENGINE = "tempo-compiled-full"  # the engine a --nojit run contributes to the staircase
 NOJIT_ID = "tempo-nojit"
 
 # Chart colors follow the engine id, not its place in the list, so an engine keeps
 # its color across runs (older runs have three engines). Slots 1-5 of the dataviz
-# reference palette in order; every adjacent pair, in engine order and in the
-# staircase's speed order, passes the colorblind and normal-vision checks.
+# reference palette, slots 1-7 in the order the engines were added; every adjacent
+# pair in engine order and in the staircase's likely speed orders passes the
+# colorblind and normal-vision checks.
 ENGINE_COLORS = {
     "python-chess": "#2a78d6",
     "tempo-harness": "#eb6834",
     "tempo-compiled-full": "#1baf7a",
     "tempo-compiled": "#eda100",
     NOJIT_ID: "#e87ba4",
+    "tempo-compiled-full-pinaware": "#008300",
+    "tempo-compiled-pinaware": "#6250d6",
 }
 SURFACE = "#fcfcfb"
 TEXT_PRIMARY = "#0b0b0b"
@@ -62,7 +65,11 @@ ENGINE_LABELS = {
     "tempo-compiled-full": "tempo · compiled",
     "tempo-compiled": "tempo · compiled + bulk count",
 }
+PIN_AWARE_SUFFIX = " · pin-aware"
+ENGINE_LABELS["tempo-compiled-full-pinaware"] = ENGINE_LABELS["tempo-compiled-full"] + PIN_AWARE_SUFFIX
+ENGINE_LABELS["tempo-compiled-pinaware"] = ENGINE_LABELS["tempo-compiled"] + PIN_AWARE_SUFFIX
 NO_JIT_SUFFIX = " (no JIT)"
+MODE_NAMES = {"copymake": "copy-make", "pinaware": "pin-aware"}
 
 Data = dict[str, Any]
 
@@ -197,7 +204,8 @@ def headline_sentence(data: Data) -> str:
     parts = []
     for e in data["engines"][1:]:
         ups = [speedup(data, cell(data, p["name"], deepest, e["id"])) for p in data["positions"]]
-        parts.append(f"**{e['label']}** {fmt_x(min(ups))[:-1]}–{fmt_x(max(ups))}")
+        lo, hi = fmt_x(min(ups)), fmt_x(max(ups))
+        parts.append(f"**{e['label']}** {hi if lo == hi else lo[:-1] + '–' + hi}")
     joined = ", ".join(parts[:-1]) + " and " + parts[-1] if len(parts) > 1 else parts[0]
     return (
         f"At depth {deepest}, measured against python-chess on the same positions: "
@@ -548,7 +556,10 @@ def run_section(data: Data) -> str:
 
 
 def engines_section(data: Data) -> str:
-    return "\n".join(["## Engines", *(f"- **{e['label']}**: {e['description']}" for e in data["engines"])])
+    def mode(e: Data) -> str:
+        return f" Legality: {MODE_NAMES.get(e['mode'], e['mode'])}." if e.get("mode") else ""
+
+    return "\n".join(["## Engines", *(f"- **{e['label']}**: {e['description']}{mode(e)}" for e in data["engines"])])
 
 
 def method_section() -> str:

@@ -10,10 +10,12 @@ from .bitboard import (
     KNIGHT,
     NUM_SQUARES,
     OCC_ALL,
+    OCC_WHITE,
     PAWN,
     QUEEN,
     ROOK,
     U0,
+    bit,
     file_of,
     lsb,
     msb,
@@ -123,3 +125,52 @@ def king_square(state, color):
 def in_check(state):
     side = side_to_move(state)
     return is_square_attacked(state, king_square(state, side), 1 - side)
+
+
+@njit(cache=True)
+def attackers_to(state, sq, by):
+    """Bitboard of every piece of color `by` that attacks sq (all of them, unlike is_square_attacked)."""
+    off = piece_index(by, PAWN)
+    occ = state[OCC_ALL]
+    return (
+        (PAWN_ATTACKS[1 - by, sq] & state[off + PAWN])
+        | (KNIGHT_ATTACKS[sq] & state[off + KNIGHT])
+        | (KING_ATTACKS[sq] & state[off + KING])
+        | (bishop_attacks(sq, occ) & (state[off + BISHOP] | state[off + QUEEN]))
+        | (rook_attacks(sq, occ) & (state[off + ROOK] | state[off + QUEEN]))
+    )
+
+
+@njit(cache=True)
+def pinned_pieces(state, side):
+    """Bitboard of `side`'s pieces pinned to its own king.
+
+    Walk the 8 rays out from the king. A piece is pinned when the first piece on a
+    ray is ours and the second is an enemy slider that moves along that ray: a rook
+    or queen on a file/rank, a bishop or queen on a diagonal.
+    """
+    them = 1 - side
+    off = piece_index(them, PAWN)
+    ksq = lsb(state[piece_index(side, KING)])
+    occ = state[OCC_ALL]
+    own = state[OCC_WHITE + side]
+    straight = state[off + ROOK] | state[off + QUEEN]
+    diagonal = state[off + BISHOP] | state[off + QUEEN]
+    pinned = U0
+    for d in range(8):
+        sliders = straight if d % 2 == 0 else diagonal  # N, E, S, W are even
+        ray = RAYS[d, ksq]
+        if (ray & sliders) == U0:
+            continue
+        blockers = ray & occ
+        positive = d == N or d == NE or d == E or d == NW
+        first = lsb(blockers) if positive else msb(blockers)
+        if (own & bit(first)) == U0:
+            continue
+        beyond = blockers & RAYS[d, first]
+        if beyond == U0:
+            continue
+        second = lsb(beyond) if positive else msb(beyond)
+        if (sliders & bit(second)) != U0:
+            pinned |= bit(first)
+    return pinned
