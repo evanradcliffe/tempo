@@ -29,6 +29,25 @@ Run from the root of the seminar's `winter26` repo, with this repo mounted at `s
 CHESS_BOARD_CLASS=ccc26.user.eradcliffe.b.Board python3 -m unittest tests/test_perft.py
 ```
 
+### Benchmarking
+Perft against python-chess on Start, Kiwi-Pete and En Passant & Pins, with the JIT warmed up first. Each run gets a folder in `bench/results/`:
+- `results.json`: every timed run, the warm-up times, node counts, commit hash and machine. This is the source of truth.
+- `README.md`, `speed.png`, `speed_by_depth.png`, `staircase.png`: the writeup and charts, generated from `results.json` alone.
+
+```
+python3 -m ccc26.user.eradcliffe.bench                  # depths 1-4, 5 runs per cell
+NUMBA_DISABLE_JIT=1 python3 -m ccc26.user.eradcliffe.bench -d 3 -r 3
+python3 -m ccc26.user.eradcliffe.bench.report           # rebuild the latest report from its JSON
+python3 -m ccc26.user.eradcliffe.bench.report <run> --nojit <no-JIT run>   # add a no-JIT bar to the staircase
+```
+Four engines, all checked against the published perft counts:
+- **python-chess**: the course's `reference_perft`, one push/pop per node.
+- **tempo · from Python**: the course's `custom_perft` on `b.Board`, also one push/pop per node from Python. This mostly measures interface cost.
+- **tempo · compiled**: `movegen.perft_every_leaf`, the whole recursion in Numba with every leaf move made. This is the fair comparison with python-chess.
+- **tempo · compiled + bulk count**: `movegen.perft`, which counts the last ply from the legal-move list instead of making each move. It visits the same nodes with less work, the usual engine trick.
+
+`staircase.png` puts all engines for one position and depth (Kiwi-Pete, depth 3 by default) in order from slowest to fastest. With `--nojit` it adds the every-leaf engine from a `NUMBA_DISABLE_JIT=1` run as plain Python. Charts need `matplotlib` (`uv pip install matplotlib`). Without it, the report is written without charts.
+
 ### Profiling
 
 #### cProfile

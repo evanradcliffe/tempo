@@ -1,4 +1,4 @@
-"""Move encoding, generation, copy-make, game-end detection and perft."""
+"""Move encoding, generation, copy-make, game-end detection and perft (bulk-counted and every-leaf)."""
 
 import numpy as np
 from numba import njit
@@ -339,4 +339,21 @@ def perft(state, depth):
     total = 0
     for i in range(n):
         total += perft(make_move(state, moves[i]), depth - 1)
+    return total
+
+
+@njit(cache=True)
+def perft_every_leaf(state, depth):
+    """perft without the depth-1 shortcut: every leaf move is made, like the course's perft loops.
+
+    perft above counts the last ply from the legal-move list (bulk counting); this one plays each
+    leaf move with make_move. Same node counts, slower, but a fair comparison with python-chess.
+    """
+    if depth == 0:
+        return 1
+    moves = np.empty(MAX_MOVES, dtype=np.int64)
+    n = generate_legal(state, moves)
+    total = 0
+    for i in range(n):
+        total += perft_every_leaf(make_move(state, moves[i]), depth - 1)
     return total
