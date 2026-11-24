@@ -649,12 +649,17 @@ def write_report(run_dir: Path, nojit_dir: Path | None = None, position: str | N
     return path
 
 
-def resolve(arg: str | None) -> Path:
-    """A run folder from a folder, a results.json, a run name, or the latest run if None."""
+def run_kind(run_dir: Path) -> str:
+    """"perft" or "search"; perft runs from before the search bench have no kind field."""
+    return json.loads((run_dir / RESULTS_FILE).read_text()).get("kind", "perft")
+
+
+def resolve(arg: str | None, kind: str = "perft") -> Path:
+    """A run folder from a folder, a results.json, a run name, or the latest run of `kind` if None."""
     if arg is None:
-        runs = sorted(d for d in RESULTS_DIR.glob("*") if (d / RESULTS_FILE).exists())
+        runs = sorted(d for d in RESULTS_DIR.glob("*") if (d / RESULTS_FILE).exists() and run_kind(d) == kind)
         if not runs:
-            sys.exit(f"No runs in {RESULTS_DIR}")
+            sys.exit(f"No {kind} runs in {RESULTS_DIR}")
         return runs[-1]
     path = Path(arg)
     if not path.exists():

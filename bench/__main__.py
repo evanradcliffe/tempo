@@ -45,19 +45,14 @@ any node count disagrees between engines or with the published perft value.
 import argparse
 import gc
 import json
-import os
-import platform
-import subprocess
 import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 import chess
-import numba
 
 from ....eval.perft import custom_perft, reference_perft
 from ..b import Board, legal_mode
@@ -66,6 +61,8 @@ from ..movegen import perft as bulk_perft
 from ..movegen import LEGAL_MODES, MAKE_MODES, perft_every_leaf
 from ..notation import parse_fen
 from . import report
+from . import runinfo
+from .runinfo import JIT, RESULTS_DIR, commit, machine, timer_settings, versions
 
 SCHEMA_VERSION = 1
 
@@ -85,10 +82,7 @@ POSITIONS = [
     ),
 ]
 
-REPO = Path(__file__).resolve().parent.parent
-RESULTS_DIR = Path(__file__).resolve().parent / "results"
 WARMUP_DEPTH = 2  # deep enough to call every compiled function at least once
-JIT = not numba.config.DISABLE_JIT
 
 
 # --- Engines -----------------------------------------------------------------
@@ -167,40 +161,6 @@ def timed(engine: Engine, state: Any, depth: int) -> tuple[int, float]:
     return nodes, time.perf_counter() - start
 
 
-# --- Run metadata ------------------------------------------------------------
-
-
-def git(*args: str) -> str:
-    return subprocess.run(["git", "-C", str(REPO), *args], capture_output=True, text=True, check=True).stdout.strip()
-
-
-def commit() -> tuple[str, bool | None]:
-    """Short hash, and whether anything but the results folder has uncommitted changes."""
-    try:
-        sha = git("rev-parse", "--short", "HEAD")
-        dirty = git("status", "--porcelain", "--", ".", f":(exclude){RESULTS_DIR.relative_to(REPO)}")
-    except (OSError, subprocess.CalledProcessError):
-        return "unknown", None
-    return sha, bool(dirty)
-
-
-def cpu_name() -> str:
-    try:
-        for line in Path("/proc/cpuinfo").read_text().splitlines():
-            if line.startswith("model name"):
-                return line.split(":", 1)[1].strip()
-    except OSError:
-        pass
-    return platform.processor() or platform.machine()
-
-
-def load_average() -> list[float] | None:
-    try:
-        return [round(x, 2) for x in os.getloadavg()]
-    except OSError:
-        return None
-
-
 # --- Main --------------------------------------------------------------------
 
 
@@ -218,31 +178,20 @@ def main() -> None:
 
     started = datetime.now()
     sha, dirty = commit()
-    clock = time.get_clock_info("perf_counter")
     data: dict[str, Any] = {
+        "kind": "perft",
         "schema": SCHEMA_VERSION,
         "started": started.isoformat(timespec="seconds"),
         "commit": sha,
         "dirty": dirty,
-        "machine": {
-            "cpu": cpu_name(),
-            "threads": os.cpu_count(),
-            "platform": platform.platform(),
-            "load_average_start": load_average(),
-        },
-        "versions": {
-            "python": platform.python_version(),
-            "python_chess": chess.__version__,
-            "numba": numba.__version__,
-        },
+        "machine": machine(),
+        "versions": versions(),
         "jit": JIT,
         "settings": {
             "max_depth": args.depth,
             "repeat": args.repeat,
             "warmup_depth": min(WARMUP_DEPTH, args.depth),
-            "gc_disabled_while_timing": True,
-            "timer": "time.perf_counter",
-            "timer_resolution_s": clock.resolution,
+            **timer_settings(),
         },
         "engines": [{"id": e.id, "label": e.label, "description": e.description, "mode": e.mode,
                      "make": e.make} for e in ENGINES],
@@ -277,7 +226,7 @@ def main() -> None:
             gc.enable()
 
     data["finished"] = datetime.now().isoformat(timespec="seconds")
-    data["machine"]["load_average_end"] = load_average()
+    data["machine"]["load_average_end"] = runinfo.load_average()
 
     print(report.summary(data))
     if not args.no_save:
