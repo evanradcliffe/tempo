@@ -63,6 +63,17 @@ Each engine's legality and make mode are saved in `results.json`.
 
 `staircase.png` puts all engines for one position and depth (Kiwi-Pete, depth 4 by default) in order from slowest to fastest. With `--nojit` it adds the every-leaf engine from a `NUMBA_DISABLE_JIT=1` run as plain Python. Charts need `matplotlib` (`uv pip install matplotlib`). Without it, the report is written without charts.
 
+#### Search benchmark
+The same conventions for the search: JIT warm-up, engines taking turns run by run, and one folder per run in `bench/results/` (ending in `_search`), with `results.json` as the source of truth.
+```
+python3 -m ccc26.user.eradcliffe.bench.search              # depths 1-4, python-chess to depth 3, 5 runs per cell
+python3 -m ccc26.user.eradcliffe.bench.search.report       # rebuild the latest search report from its JSON
+```
+- **What it times:** on Start, Kiwi-Pete and En Passant & Pins, it times `search_root` with alpha-beta and with plain negamax, recording nodes, root score and best move. It also times the python-chess negamax from `tests/test_search.py` (same material eval and leaf rules) up to depth 3.
+- **Evaluation speed:** on every node of seeded random games, it compares python-chess's material count with the compiled `evaluate()`, both called from Python and in a compiled loop.
+- **Checks:** the run exits with 1, after saving, if alpha-beta and negamax root scores differ anywhere, if python-chess's score differs from ours, if alpha-beta visits more nodes than negamax, if any engine repeats a cell differently, or if the two evals disagree on a position.
+- **Report:** `README.md` with `nodes.png` (nodes by depth), `time.png` (time by depth, against python-chess) and `pruning.png` (negamax nodes ÷ alpha-beta nodes).
+
 ### Legality modes
 Move generation produces pseudo-legal moves, then filters out the ones that leave the own king in check. There are two ways to do that filter, chosen at runtime:
 - `copymake` (default): play every move on a copy and test whether the king is attacked.
