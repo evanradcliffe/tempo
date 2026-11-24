@@ -20,10 +20,14 @@ def git(*args: str) -> str:
 
 
 def commit() -> tuple[str, bool | None]:
-    """Short hash, and whether anything but the results folder has uncommitted changes."""
+    """Short hash, and whether any tracked file outside the results folder has uncommitted changes.
+
+    Untracked files don't count: a stray notes folder shouldn't mark every run dirty.
+    """
     try:
         sha = git("rev-parse", "--short", "HEAD")
-        dirty = git("status", "--porcelain", "--", ".", f":(exclude){RESULTS_DIR.relative_to(REPO)}")
+        dirty = git("status", "--porcelain", "--untracked-files=no", "--", ".",
+                    f":(exclude){RESULTS_DIR.relative_to(REPO)}")
     except (OSError, subprocess.CalledProcessError):
         return "unknown", None
     return sha, bool(dirty)
