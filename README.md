@@ -9,8 +9,10 @@ This codebase is being developed for the seminar *Cogsci Chess Club: A Project S
 > This repository is meant to be a submodule for a harness that is not publicly available. It's not a standalone program, the entrypoints live in the harness.
 
 ## Status
-- Move generation passes perft against python-chess on the standard test positions (start position, Kiwi-Pete, en passant/pins).
-- Now: profiling and speeding up move generation. Next: alpha-beta search.
+- Move generation passes perft against python-chess on the standard test positions (start position, Kiwi-Pete, en passant/pins), with pin-aware legality and in-place XOR make/unmake as opt-in modes.
+- Assignment 6: a material evaluator and a fixed-depth negamax search with alpha-beta pruning, both compiled (see Evaluation and Search below).
+- The search adapter (`alphabeta.AlphaBetaSearch`) can't be used through the harness yet: `ccc26.search` doesn't import (its `__init__` does `from search import ...`). Its tests are skipped until it does.
+- Next: move ordering, quiescence search, iterative deepening and time limits.
 
 ## Design
 - **Studying representation:** symbolic vs. neural net vs. transformer evaluation
@@ -30,11 +32,13 @@ CHESS_BOARD_CLASS=ccc26.user.eradcliffe.b.Board python3 -m unittest tests/test_p
 python3 -m unittest ccc26.user.eradcliffe.tests.test_legal_modes                         # ~3 s
 TEMPO_DIFF_GAMES=3000 python3 -m unittest ccc26.user.eradcliffe.tests.test_legal_modes   # full differential, ~1 min
 python3 -m unittest ccc26.user.eradcliffe.tests.test_make_modes                          # ~3 s; TEMPO_DIFF_GAMES=3000 for the full check (~40 s)
+python3 -m unittest ccc26.user.eradcliffe.tests.test_evaluate                            # ~3 s; TEMPO_DIFF_GAMES=3000 ~75 s
+python3 -m unittest ccc26.user.eradcliffe.tests.test_search                              # ~6 s; TEMPO_DIFF_GAMES=3000 ~80 s
 ```
 `test_legal_modes` checks that copy-make and pin-aware legality agree: `pinned_pieces` on hand-made pins, perft against the published counts in both modes, and random games where both modes and python-chess must give the same legal moves at every position.
 
 > [!WARNING]
-> Numba's `cache=True` only recompiles a function when **its own file** changes. If you edit `bitboard.py` or `attacks.py`, cached functions in `movegen.py` keep the old compiled code and tests can pass against stale code. After such an edit, clear the cache first: `find . -name '*.nb[ic]' -delete` (or run with `NUMBA_CACHE_DIR` set to an empty folder).
+> Numba's `cache=True` only recompiles a function when **its own file** changes. If you edit `bitboard.py` or `attacks.py`, cached functions in `movegen.py` keep the old compiled code and tests can pass against stale code. The same goes for `search.py` after editing `movegen.py` or `evaluate.py`, and for anything using the harness's `CHECKMATE_SCORE` if that changes. After such an edit, clear the cache first: `find . -name '*.nb[ic]' -delete` (or run with `NUMBA_CACHE_DIR` set to an empty folder).
 
 ### Benchmarking
 Perft against python-chess on Start, Kiwi-Pete and En Passant & Pins, with the JIT warmed up first. Each run gets a folder in `bench/results/`:
@@ -72,6 +76,38 @@ How a move is applied, independent of the legality mode (the `copymake` legality
 - `xor`: `make_inplace` changes the one state array in place. It XORs the moved piece's from/to bits into its board and the occupancy boards, clears a captured piece's bit, and returns an undo record of two numbers: the captured piece type and the old meta word. `unmake_inplace` repeats the XORs and restores the meta word.
 
 `b.Board` reads `TEMPO_MAKE=copy|xor` (or `Board(fen, make="xor")`). The compiled functions take it as one more argument: `generate_legal(state, moves, mode, make)`, `perft(state, depth, mode, make)` and so on. In `xor` mode, `board.state` stays the same array object for the board's whole life, so copy it if you want to keep a position. `test_make_modes` checks that `make_inplace` produces exactly what `make_move` does for every legal move along random games, and that `unmake_inplace` restores the array bit for bit.
+
+### Evaluation
+`evaluate.evaluate(state, mode)` scores a position in centipawns from the side to move's view: positive is good for the player to move. It is static. It generates no moves and doesn't detect checkmate or stalemate, which is the search's job. Modes work like the legality modes: `EVAL_MODES` maps a name to an int that is passed through the compiled search, so a piece-square-table eval can be added as mode 1 later.
+- `material` (mode 0): pawn 100, knight 320, bishop 330, rook 500, queen 900, king 0.
+
+`Evaluator(mode="material")` is the harness's `AbstractEvaluator`: `Evaluator().evaluate(board)` runs the compiled eval on a `b.Board`'s state. `test_evaluate` checks the start position, hand-made imbalances with each side to move, mirrored positions, and a material count written on python-chess at every node of random games.
+
+### Search
+`search.py` is a fixed-depth negamax, compiled with Numba. It walks the tree on one state array with `make_inplace`/`unmake_inplace` and pin-aware legality, with no Python per node, and the array is back bit for bit when it returns.
+- `search_root(state, depth, eval_mode, search_mode)` returns `(best move, score, nodes)`. Ties go to the first move in generation order. With no legal move at the root it returns `NO_MOVE` and `-CHECKMATE_SCORE` or `DRAW_SCORE`.
+- `negamax(state, depth, eval_mode, search_mode)` returns just the score.
+- `SEARCH_MODES`: `alphabeta` (default) prunes. `negamax` searches every move and is the reference: both give the same root score, and alpha-beta never visits more nodes.
+- Scores come from the harness (`CHECKMATE_SCORE = 30000`, `DRAW_SCORE = 0`). Being checkmated at ply p scores `-(CHECKMATE_SCORE - p)`, so a quicker mate scores higher. With no legal move, an interior node is mate or stalemate. A leaf (depth 0) is mate if in check with no legal move, otherwise the static eval; stalemate at leaves is ignored for now. There's no 50-move rule or repetition yet.
+
+`alphabeta.AlphaBetaSearch(mode="alphabeta")` is the harness's `AbstractSearch`. It needs a `b.Board` and an `Evaluator`, uses `limits.depth` (default 3), and ignores the other limits. `stop()` can't interrupt a search already running in compiled code. It is in its own module because `ccc26.search` doesn't import yet.
+
+Nodes visited (root included), material eval:
+
+| Position | Depth | alpha-beta | negamax |
+|---|---:|---:|---:|
+| Start | 1 | 21 | 21 |
+| Start | 2 | 60 | 421 |
+| Start | 3 | 586 | 9,323 |
+| Start | 4 | 2,012 | 206,604 |
+| Kiwi-Pete | 1 | 49 | 49 |
+| Kiwi-Pete | 2 | 456 | 2,088 |
+| Kiwi-Pete | 3 | 6,903 | 99,950 |
+| Kiwi-Pete | 4 | 26,518 | 4,185,553 |
+
+Plain negamax visits exactly one more than the sum of the perft counts up to that depth.
+
+`test_search` checks mate in 1 and 2, a hanging queen, a defended pawn, checkmate and stalemate at the root, alpha-beta against negamax on positions from random games, a negamax written on python-chess with the same eval and leaf rules, and that the state is unchanged after every search.
 
 ### Profiling
 
