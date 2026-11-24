@@ -51,6 +51,10 @@ ENGINE_COLORS = {
     "tempo-compiled-full-pinaware": "#008300",
     "tempo-compiled-pinaware": "#6250d6",
 }
+# An XOR twin ("<id>-xor") keeps its copy-make engine's color and adds texture: a hatch on
+# bars, a dashed line on the depth chart. Make mode is the second encoding, not a new hue.
+XOR_ID_SUFFIX = "-xor"
+XOR_HATCH = "////"
 SURFACE = "#fcfcfb"
 TEXT_PRIMARY = "#0b0b0b"
 TEXT_SECONDARY = "#52514e"
@@ -68,8 +72,11 @@ ENGINE_LABELS = {
 PIN_AWARE_SUFFIX = " · pin-aware"
 ENGINE_LABELS["tempo-compiled-full-pinaware"] = ENGINE_LABELS["tempo-compiled-full"] + PIN_AWARE_SUFFIX
 ENGINE_LABELS["tempo-compiled-pinaware"] = ENGINE_LABELS["tempo-compiled"] + PIN_AWARE_SUFFIX
+XOR_SUFFIX = " · XOR"
+ENGINE_LABELS |= {i + XOR_ID_SUFFIX: label + XOR_SUFFIX for i, label in ENGINE_LABELS.items() if i != "python-chess"}
 NO_JIT_SUFFIX = " (no JIT)"
 MODE_NAMES = {"copymake": "copy-make", "pinaware": "pin-aware"}
+MAKE_NAMES = {"copy": "copy the state per move", "xor": "in-place XOR make/unmake"}
 
 Data = dict[str, Any]
 
@@ -261,8 +268,16 @@ def _style(plt: Any) -> None:
     })
 
 
+def is_xor(engine_id: str) -> bool:
+    return engine_id.endswith(XOR_ID_SUFFIX)
+
+
 def color(engine_id: str) -> str:
-    return ENGINE_COLORS.get(engine_id, FALLBACK_COLOR)
+    return ENGINE_COLORS.get(engine_id.removesuffix(XOR_ID_SUFFIX), FALLBACK_COLOR)
+
+
+def hatch(engine_id: str) -> str | None:
+    return XOR_HATCH if is_xor(engine_id) else None
 
 
 def footnote(data: Data, rows: list[Data]) -> str:
@@ -309,7 +324,8 @@ def speed_chart(data: Data, path: Path) -> None:
     positions = [p["name"] for p in data["positions"]]
     engines = data["engines"]
     height = 0.8 / len(engines)
-    fig, ax = plt.subplots(figsize=(8, 0.4 * len(engines) * len(positions) + 1.8), dpi=200, layout="constrained")
+    fig, ax = plt.subplots(figsize=(8, min(0.4, 2.4 / len(engines)) * len(engines) * len(positions) + 2.2), dpi=200,
+                           layout="constrained")
     fastest, shown = 0.0, []
     for i, e in enumerate(engines):
         ys = [y - 0.4 + height * (i + 0.5) for y in range(len(positions))]
@@ -318,7 +334,7 @@ def speed_chart(data: Data, path: Path) -> None:
         rates = [nodes(r) / best(r) for r in rows]
         fastest = max(fastest, *rates)
         ax.barh(ys, rates, height=height, color=color(e["id"]), edgecolor=SURFACE, linewidth=1.5, zorder=2,
-                label=e["label"])
+                hatch=hatch(e["id"]), label=e["label"])
         for y, rate, row in zip(ys, rates, rows):
             text = f"{short_rate(rate)}/s"
             if e["id"] != reference(data):
@@ -351,7 +367,8 @@ def depth_chart(data: Data, path: Path) -> None:
 
     _style(plt)
     positions = [p["name"] for p in data["positions"]]
-    fig, axes = plt.subplots(1, len(positions), figsize=(8, 3.6), dpi=200, sharey=True, layout="constrained")
+    height = 3.6 + 0.12 * max(0, len(data["engines"]) - 6)  # room for a longer legend
+    fig, axes = plt.subplots(1, len(positions), figsize=(8, height), dpi=200, sharey=True, layout="constrained")
     any_fast = False
     for ax, name in zip(axes, positions):
         for e in data["engines"]:
@@ -361,8 +378,8 @@ def depth_chart(data: Data, path: Path) -> None:
                 runs = [nodes(row) / s for s in row["seconds"]]
                 ax.plot([row["depth"]] * len(runs), runs, "o", markersize=3, zorder=2, alpha=0.45,
                         color=c, markerfacecolor="none" if is_fast(row) else c, markeredgewidth=0.8)
-            ax.plot(depths(data), [nodes(r) / best(r) for r in rows], "-o", linewidth=1.5, markersize=4.5,
-                    color=c, zorder=3, label=e["label"] if ax is axes[0] else None)
+            ax.plot(depths(data), [nodes(r) / best(r) for r in rows], "--o" if is_xor(e["id"]) else "-o",
+                    linewidth=1.5, markersize=4.5, color=c, zorder=3, label=e["label"] if ax is axes[0] else None)
             fast = [r for r in rows if is_fast(r)]
             any_fast |= bool(fast)
             ax.plot([r["depth"] for r in fast], [nodes(r) / best(r) for r in fast], "o", markersize=4.5,
@@ -410,19 +427,21 @@ def staircase_chart(data: Data, path: Path, position: str, depth: int, nojit: Da
 
     _style(plt)
     ref = best(cell(data, position, depth, reference(data)))
-    bars = []  # (label, rate, speedup, color)
+    bars = []  # (label, rate, speedup, color, hatch)
     for e in data["engines"]:
         row = cell(data, position, depth, e["id"])
-        bars.append((e["label"], nodes(row) / best(row), ref / best(row), color(e["id"])))
+        bars.append((e["label"], nodes(row) / best(row), ref / best(row), color(e["id"]), hatch(e["id"])))
     if nojit is not None:
         row = nojit["row"]
-        bars.append(("tempo · no JIT", nodes(row) / best(row), ref / best(row), color(NOJIT_ID)))
+        bars.append(("tempo · no JIT", nodes(row) / best(row), ref / best(row), color(NOJIT_ID), None))
     bars.sort(key=lambda b: b[1])
     fig, ax = plt.subplots(figsize=(8, 0.45 * len(bars) + 1.5), dpi=200, layout="constrained")
     ys = range(len(bars))
-    ax.barh(ys, [b[1] for b in bars], height=0.7, color=[b[3] for b in bars], edgecolor=SURFACE, linewidth=1.5,
-            zorder=2)
-    for y, (_, rate, up, _) in zip(ys, bars):
+    drawn = ax.barh(ys, [b[1] for b in bars], height=0.7, color=[b[3] for b in bars], edgecolor=SURFACE,
+                    linewidth=1.5, zorder=2)
+    for patch, b in zip(drawn, bars):
+        patch.set_hatch(b[4])
+    for y, (_, rate, up, _, _) in zip(ys, bars):
         ax.annotate(f"{short_rate(rate)}/s · {'1×' if up == 1 else fmt_x(up)}", (rate, y), xytext=(4, 0), textcoords="offset points",
                     va="center", fontsize=8, color=TEXT_PRIMARY)
     ax.set_xlim(0, bars[-1][1] * 1.2)
@@ -557,7 +576,8 @@ def run_section(data: Data) -> str:
 
 def engines_section(data: Data) -> str:
     def mode(e: Data) -> str:
-        return f" Legality: {MODE_NAMES.get(e['mode'], e['mode'])}." if e.get("mode") else ""
+        out = f" Legality: {MODE_NAMES.get(e['mode'], e['mode'])}." if e.get("mode") else ""
+        return out + (f" Make: {MAKE_NAMES.get(e['make'], e['make'])}." if e.get("make") else "")
 
     return "\n".join(["## Engines", *(f"- **{e['label']}**: {e['description']}{mode(e)}" for e in data["engines"])])
 

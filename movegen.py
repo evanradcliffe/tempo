@@ -1,4 +1,4 @@
-"""Move encoding, generation, copy-make, game-end detection and perft (bulk-counted and every-leaf)."""
+"""Move encoding, generation, make-move (copy and in-place XOR), game-end detection and perft."""
 
 import numpy as np
 from numba import njit
@@ -31,6 +31,7 @@ from .bitboard import (
     MOVE_FLAG_SHIFT,
     MOVE_PROMO_SHIFT,
     MOVE_TO_SHIFT,
+    NO_PIECE,
     NO_PROMO,
     NO_SQ,
     NUM_SQUARES,
@@ -89,6 +90,16 @@ from .attacks import (
 LEGAL_COPYMAKE = 0
 LEGAL_PINAWARE = 1
 LEGAL_MODES = {"copymake": LEGAL_COPYMAKE, "pinaware": LEGAL_PINAWARE}
+
+# How a move is applied, for legality trials, perft and b.Board. Also a runtime
+# argument, independent of the legality mode above.
+#   COPY  make_move: return a new state array, leave the old one alone; undo by
+#         keeping the old array.
+#   XOR   make_inplace: change the one state array in place by XOR-ing the moved
+#         bits, return a two-number undo record; unmake_inplace reverses it.
+MAKE_COPY = 0
+MAKE_XOR = 1
+MAKE_MODES = {"copy": MAKE_COPY, "xor": MAKE_XOR}
 
 
 # --- Castling rights table ------------------------------------------------
@@ -304,6 +315,122 @@ def make_move(state, move):
 
 
 @njit(cache=True)
+def _own_piece_on(state, side, bb):
+    """Bitboard index of `side`'s piece on the square in bb (scans 6 boards, not 12)."""
+    first = piece_index(side, PAWN)
+    for i in range(first, first + PIECES_PER_COLOR):
+        if (state[i] & bb) != U0:
+            return i
+    return NO_PIECE
+
+
+@njit(cache=True)
+def _castle_rook_squares(to):
+    """Rook (from, to) for a castling move whose king lands on `to`."""
+    home = rank_of(to)
+    if file_of(to) == FILE_G:  # king side: h-rook to f-file
+        return square(FILE_H, home), square(FILE_F, home)
+    return square(FILE_A, home), square(FILE_D, home)  # queen side: a-rook to d-file
+
+
+@njit(cache=True)
+def make_inplace(state, move):
+    """Play `move` on `state` itself; return the undo record (captured piece type or NO_PIECE, old meta).
+
+    Only the bits the move touches change: the mover's from/to bits are XOR-ed into its own
+    board and straight into the occupancy boards, a captured piece's bit is cleared the same
+    way. No array is allocated. unmake_inplace(state, move, *record) restores the position.
+    """
+    frm = move_from(move)
+    to = move_to(move)
+    promo = move_promo(move)
+    flag = move_flag(move)
+    old_meta = state[META]
+    side = side_to_move(state)
+    them = 1 - side
+    from_bb = bit(frm)
+    to_bb = bit(to)
+    piece = _own_piece_on(state, side, from_bb)
+
+    captured = NO_PIECE
+    if flag == FLAG_EP:
+        # The captured pawn sits behind the target square, not on it
+        cap_bb = bit(to - ONE_RANK if side == WHITE else to + ONE_RANK)
+        captured = PAWN
+        state[piece_index(them, PAWN)] ^= cap_bb
+        state[OCC_WHITE + them] ^= cap_bb
+        state[OCC_ALL] ^= cap_bb
+    elif (state[OCC_WHITE + them] & to_bb) != U0:
+        captured = _own_piece_on(state, them, to_bb) - piece_index(them, PAWN)
+        state[piece_index(them, captured)] ^= to_bb
+        state[OCC_WHITE + them] ^= to_bb
+        state[OCC_ALL] ^= to_bb  # cleared here, set again by the mover below
+
+    move_bb = from_bb | to_bb
+    if promo != NO_PROMO:
+        state[piece] ^= from_bb
+        state[piece_index(side, promo)] ^= to_bb
+    else:
+        state[piece] ^= move_bb
+    state[OCC_WHITE + side] ^= move_bb
+    state[OCC_ALL] ^= move_bb
+
+    if flag == FLAG_CASTLE:
+        rook_from, rook_to = _castle_rook_squares(to)
+        rook_bb = bit(rook_from) | bit(rook_to)
+        state[piece_index(side, ROOK)] ^= rook_bb
+        state[OCC_WHITE + side] ^= rook_bb
+        state[OCC_ALL] ^= rook_bb
+
+    rights = castling_rights(state) & CASTLE_KEEP[frm] & CASTLE_KEEP[to]
+    ep = (frm + to) // 2 if flag == FLAG_DOUBLE else NO_SQ
+    pawn_or_capture = piece == piece_index(side, PAWN) or captured != NO_PIECE
+    halfmove = 0 if pawn_or_capture else halfmove_clock(state) + 1
+    fullmove = fullmove_number(state) + (1 if side == BLACK else 0)
+    state[META] = pack_meta(them, rights, ep, halfmove, fullmove)
+    return captured, old_meta
+
+
+@njit(cache=True)
+def unmake_inplace(state, move, captured, old_meta):
+    """Undo make_inplace(state, move): the same XORs again, then put back what XOR can't rebuild."""
+    state[META] = old_meta  # side, castling rights, en passant square, clocks
+    frm = move_from(move)
+    to = move_to(move)
+    promo = move_promo(move)
+    flag = move_flag(move)
+    side = side_to_move(state)
+    them = 1 - side
+    from_bb = bit(frm)
+    to_bb = bit(to)
+
+    move_bb = from_bb | to_bb
+    if promo != NO_PROMO:
+        state[piece_index(side, promo)] ^= to_bb
+        state[piece_index(side, PAWN)] ^= from_bb
+    else:
+        state[_own_piece_on(state, side, to_bb)] ^= move_bb
+    state[OCC_WHITE + side] ^= move_bb
+    state[OCC_ALL] ^= move_bb
+
+    if flag == FLAG_CASTLE:
+        rook_from, rook_to = _castle_rook_squares(to)
+        rook_bb = bit(rook_from) | bit(rook_to)
+        state[piece_index(side, ROOK)] ^= rook_bb
+        state[OCC_WHITE + side] ^= rook_bb
+        state[OCC_ALL] ^= rook_bb
+
+    if captured != NO_PIECE:
+        if flag == FLAG_EP:
+            cap_bb = bit(to - ONE_RANK if side == WHITE else to + ONE_RANK)
+        else:
+            cap_bb = to_bb
+        state[piece_index(them, captured)] ^= cap_bb
+        state[OCC_WHITE + them] ^= cap_bb
+        state[OCC_ALL] ^= cap_bb
+
+
+@njit(cache=True)
 def safe_movers(state, side, mode):
     """Squares of own pieces whose (non-en-passant) moves are legal without testing.
 
@@ -320,17 +447,26 @@ def safe_movers(state, side, mode):
 
 
 @njit(cache=True)
-def is_legal(state, move, side, safe):
-    """Is this pseudo-legal move legal? `safe` comes from safe_movers."""
+def is_legal(state, move, side, safe, make):
+    """Is this pseudo-legal move legal? `safe` comes from safe_movers, `make` is MAKE_COPY or MAKE_XOR.
+
+    The trial plays the move and asks whether the own king is attacked. Pins and en passant
+    discovered checks fall out of this for free. With MAKE_XOR the trial is played on `state`
+    itself and taken back before returning, so the caller sees it unchanged.
+    """
     if (safe & bit(move_from(move))) != U0 and move_flag(move) != FLAG_EP:
         return True
+    if make == MAKE_XOR:
+        captured, old_meta = make_inplace(state, move)
+        attacked = is_square_attacked(state, king_square(state, side), 1 - side)
+        unmake_inplace(state, move, captured, old_meta)
+        return not attacked
     after = make_move(state, move)
-    # Pins and en passant discovered checks fall out of this for free
     return not is_square_attacked(after, king_square(after, side), 1 - side)
 
 
 @njit(cache=True)
-def generate_legal(state, moves, mode=LEGAL_COPYMAKE):
+def generate_legal(state, moves, mode=LEGAL_COPYMAKE, make=MAKE_COPY):
     """Fill `moves` with legal moves; return the count."""
     pseudo = np.empty(MAX_MOVES, dtype=np.int64)
     count = generate_pseudo_legal(state, pseudo)
@@ -338,61 +474,91 @@ def generate_legal(state, moves, mode=LEGAL_COPYMAKE):
     safe = safe_movers(state, side, mode)
     n = 0
     for i in range(count):
-        if is_legal(state, pseudo[i], side, safe):
+        if is_legal(state, pseudo[i], side, safe, make):
             moves[n] = pseudo[i]
             n += 1
     return n
 
 
 @njit(cache=True)
-def has_legal_move(state, mode=LEGAL_COPYMAKE):
+def has_legal_move(state, mode=LEGAL_COPYMAKE, make=MAKE_COPY):
     pseudo = np.empty(MAX_MOVES, dtype=np.int64)
     count = generate_pseudo_legal(state, pseudo)
     side = side_to_move(state)
     safe = safe_movers(state, side, mode)
     for i in range(count):
-        if is_legal(state, pseudo[i], side, safe):
+        if is_legal(state, pseudo[i], side, safe, make):
             return True
     return False
 
 
 @njit(cache=True)
-def is_checkmate(state, mode=LEGAL_COPYMAKE):
-    return in_check(state) and not has_legal_move(state, mode)
+def is_checkmate(state, mode=LEGAL_COPYMAKE, make=MAKE_COPY):
+    return in_check(state) and not has_legal_move(state, mode, make)
 
 
 @njit(cache=True)
-def is_stalemate(state, mode=LEGAL_COPYMAKE):
-    return not in_check(state) and not has_legal_move(state, mode)
+def is_stalemate(state, mode=LEGAL_COPYMAKE, make=MAKE_COPY):
+    return not in_check(state) and not has_legal_move(state, mode, make)
+
+
+# perft and perft_every_leaf keep their defaults for callers but recurse through the
+# private versions below, which always get every argument as a plain int64. Numba
+# types a left-out default argument as "omitted"; a recursive function compiled
+# with that type runs fine when freshly compiled but segfaults when loaded from the
+# cache=True cache in a later process.
 
 
 @njit(cache=True)
-def perft(state, depth, mode=LEGAL_COPYMAKE):
-    """Count leaf nodes of the legal move tree; the standard move generator test."""
+def perft(state, depth, mode=LEGAL_COPYMAKE, make=MAKE_COPY):
+    """Count leaf nodes of the legal move tree; the standard move generator test.
+
+    The last ply is counted from the legal-move list (bulk counting). With MAKE_XOR the
+    whole tree is walked on `state` itself, which is back as it was on return.
+    """
+    return _perft(state, np.int64(depth), np.int64(mode), np.int64(make))
+
+
+@njit(cache=True)
+def perft_every_leaf(state, depth, mode=LEGAL_COPYMAKE, make=MAKE_COPY):
+    """perft without the depth-1 shortcut: every leaf move is made, like the course's perft loops.
+
+    Same node counts as perft, slower, but a fair comparison with python-chess.
+    """
+    return _perft_every_leaf(state, np.int64(depth), np.int64(mode), np.int64(make))
+
+
+@njit(cache=True)
+def _perft(state, depth, mode, make):
     if depth == 0:
         return 1
     moves = np.empty(MAX_MOVES, dtype=np.int64)
-    n = generate_legal(state, moves, mode)
+    n = generate_legal(state, moves, mode, make)
     if depth == 1:
         return n
     total = 0
     for i in range(n):
-        total += perft(make_move(state, moves[i]), depth - 1, mode)
+        if make == MAKE_XOR:
+            captured, old_meta = make_inplace(state, moves[i])
+            total += _perft(state, depth - 1, mode, make)
+            unmake_inplace(state, moves[i], captured, old_meta)
+        else:
+            total += _perft(make_move(state, moves[i]), depth - 1, mode, make)
     return total
 
 
 @njit(cache=True)
-def perft_every_leaf(state, depth, mode=LEGAL_COPYMAKE):
-    """perft without the depth-1 shortcut: every leaf move is made, like the course's perft loops.
-
-    perft above counts the last ply from the legal-move list (bulk counting); this one plays each
-    leaf move with make_move. Same node counts, slower, but a fair comparison with python-chess.
-    """
+def _perft_every_leaf(state, depth, mode, make):
     if depth == 0:
         return 1
     moves = np.empty(MAX_MOVES, dtype=np.int64)
-    n = generate_legal(state, moves, mode)
+    n = generate_legal(state, moves, mode, make)
     total = 0
     for i in range(n):
-        total += perft_every_leaf(make_move(state, moves[i]), depth - 1, mode)
+        if make == MAKE_XOR:
+            captured, old_meta = make_inplace(state, moves[i])
+            total += _perft_every_leaf(state, depth - 1, mode, make)
+            unmake_inplace(state, moves[i], captured, old_meta)
+        else:
+            total += _perft_every_leaf(make_move(state, moves[i]), depth - 1, mode, make)
     return total
